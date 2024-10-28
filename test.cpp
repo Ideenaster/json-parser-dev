@@ -23,11 +23,12 @@ int main()
     SetConsoleOutputCP(65001);
     std::string jsonStr;
     std::ifstream file("D:\\Code\\kingsoft\\week01\\json-parser-dev\\assert\\input_json.txt");
+    std::ifstream file2("D:\\Code\\kingsoft\\week01\\json-parser-dev\\assert\\citm_catalog.json");
     if (file.is_open()) {
         std::stringstream buffer;
-        buffer << file.rdbuf();
+        buffer << file2.rdbuf();
         jsonStr = buffer.str();
-        file.close();
+        file2.close();
     } else {
         std::cerr << "无法打开文件" << std::endl;
         return 1;

@@ -93,3 +93,6 @@ throw std::logic_error(std::string(e.what()) +
     "\nPosition: " + std::to_string(_pos));   
 ```
 `e.what()`是上层简单类型解析函数抛出的异常字符串。
+
+### 测试
+唉，最后测试一个benchmark发现没处理parse_string的转义字符问题
