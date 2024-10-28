@@ -74,3 +74,22 @@ struct ParseContext {
 ### 解决问题
 - 一开始出于代码复用的考虑将PARSE_OBJECT_VALUE状态重定向到PARSE_VALUE(该状态负责基本类型的解析)，增加该重定向过程引发一系列问题，比如无法从嵌套object或者array中跳出。
 - 当前方案为使用重复的PARSE_VALUE段进行解析，解析过程中PARSE_OBJECT_VALUE和PARSE_OBJECT_KEY等不会构建下层解析状态，直接进switch作基本类型解析。
+
+## day6
+### XML序列化
+和`to_pretty_string`的实现逻辑没有太大的区别
+
+### 解析错误时的提示
+#### 思路
+如何规范输出错误，我认为作为一个parser的解析错误提示，应当至少具备以下输出：
+
+- 输出当前上下文（context）（由状态决定，比如PARSE_OBJECT_KEY是指parser”认为“自己在解析对象的键）
+- 语法错误，由上层的异常给出（如parse_number给出的int溢出等）
+- 当前位置, 亦即当前无法解析的字符的偏移位置
+所以，我将异常对象的字符串设定以下格式
+```cpp
+throw std::logic_error(std::string(e.what()) + 
+    "\nContext: " + "context.state" + 
+    "\nPosition: " + std::to_string(_pos));   
+```
+`e.what()`是上层简单类型解析函数抛出的异常字符串。

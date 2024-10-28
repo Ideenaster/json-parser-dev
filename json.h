@@ -3,6 +3,7 @@
 #include <vector>
 #include <map>
 #include <unordered_map>
+#include <string_view>   //cpp17
 
 namespace KJson
 {
@@ -59,6 +60,7 @@ namespace KJson
         // 序列化为字符串
         std::string to_string() const;
         std::string to_pretty_string(int indent_level) const;
+        std::string to_XML(int indent_level) const;
         void parseStr(const std::string &str);
 
     private:

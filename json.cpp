@@ -22,7 +22,7 @@ Json::Json(double value) : _type(JSON_DOUBLE)
 {
     _value._double = value;
 }
-Json::Json(const std::string& value) : _type(JSON_STRING)   
+Json::Json(const std::string &value) : _type(JSON_STRING)   
 {
     _value._string = new std::string(value);
 }
@@ -306,6 +306,51 @@ std::string Json::to_pretty_string(int indent_level = 0) const
     }
     return ss.str();
 }
+
+//XML序列化
+std::string Json::to_XML(int indent_level = 0) const 
+{
+    const std::string indent(indent_level * 2, ' '); // 每级缩进两个空格
+    std::stringstream ss;
+
+    switch(_type) {
+        case JSON_NULL:
+            ss << indent << "<null/>";
+            break;
+        case JSON_BOOL:
+            ss << indent << "<boolean>" << (_value._bool ? "true" : "false") << "</boolean>";
+            break;
+        case JSON_INT:
+            ss << indent << "<number>" << _value._int << "</number>";
+            break;
+        case JSON_DOUBLE:
+            ss << indent << "<number>" << _value._double << "</number>";
+            break;
+        case JSON_STRING:
+            ss << indent << "<string>" << *_value._string << "</string>";
+            break;
+        case JSON_ARRAY:
+            ss << indent << "<array>\n";
+            for (size_t i = 0; i < _value._array->size(); ++i) {
+                ss << (*_value._array)[i].to_XML(indent_level + 1);
+                ss << "\n";
+            }
+            ss << indent << "</array>";
+            break;
+        case JSON_OBJECT:
+            ss << indent << "<object>\n";
+            for (const auto& pair : *_value._object) {
+                ss << indent << "    <key>" << pair.first << "</key>\n";
+                ss << indent << "    <value>\n";
+                ss << pair.second.to_XML(indent_level + 3);
+                ss << "\n" << indent << "    </value>\n";
+            }
+            ss << indent << "</object>";
+            break;
+    }
+    return ss.str();
+}
+
 //解析器
 void Json::skip_space(){
     while(_pos < _str.size() && isspace(_str[_pos]))
@@ -345,7 +390,7 @@ Json Json::parse() {
         
         skip_space();
         if (_pos >= _str.size()) {
-            if (parseStack.size() > 1) {  // 如果不��最外层，说明JSON未正确结束
+            if (parseStack.size() > 1) {  // 如果不是最外层，说明JSON未正确结束
                 throw std::runtime_error("Unexpected end of input");
             }
             break;  // 正常结束
@@ -356,17 +401,45 @@ Json Json::parse() {
         switch (context.state) {
             case PARSE_VALUE:
                 if (ch == 'n') {
-                    *context.json = parse_null();
+                    try{
+                        *context.json = parse_null();
+                    }
+                    catch(std::logic_error& e){
+                        throw std::logic_error(std::string(e.what()) + 
+                          "\nContext: " + "PARSE_VALUE" + 
+                          "\nPosition: " + std::to_string(_pos));
+                    }
                     parseStack.pop();
                 } else if (ch == 't' || ch == 'f') {
-                    *context.json = parse_bool();
+                    try{
+                        *context.json = parse_bool();
+                    }
+                    catch(std::logic_error& e){
+                        throw std::logic_error(std::string(e.what()) + 
+                          "\nContext: " + "PARSE_VALUE" + 
+                          "\nPosition: " + std::to_string(_pos));
+                    }
                     parseStack.pop();
                 } else if (ch == '-' || (ch >= '0' && ch <= '9')) {
-                    *context.json = parse_number();
+                    try{
+                        *context.json = parse_number();
+                    }
+                    catch(std::logic_error& e){
+                        throw std::logic_error(std::string(e.what()) + 
+                          "\nContext: " + "PARSE_VALUE" + 
+                          "\nPosition: " + std::to_string(_pos));
+                    }
                     parseStack.pop();
                 } else if (ch == '"') {
                     _pos++;
-                    *context.json = parse_string();
+                    try{
+                        *context.json = parse_string();
+                    }
+                    catch(std::logic_error& e){
+                        throw std::logic_error(std::string(e.what()) + 
+                          "\nContext: " + "PARSE_VALUE" + 
+                          "\nPosition: " + std::to_string(_pos));
+                    }
                     parseStack.pop();
                 } else if (ch == '[') {
                     *context.json = Json(JSON_ARRAY);
@@ -377,7 +450,9 @@ Json Json::parse() {
                     _pos++;
                     parseStack.push(ParseContext(PARSE_OBJECT_KEY, context.json));
                 } else {
-                    throw std::logic_error("Unexpected character");
+                    throw std::logic_error(std::string("parser can not identify the type of the value") +
+                    "\nContext: " + "PARSE_VALUE" +
+                    "\nPosition: " + std::to_string(_pos));
                 }
                 break;
 
@@ -397,18 +472,30 @@ Json Json::parse() {
                     }
                 } else {
                     if (ch != '"') {
-                        throw std::logic_error("Expected '\"' for object key");
+                        throw std::logic_error(std::string("Expected '\"' for object key") +
+                        "\nContext: " + "PARSE_OBJECT_KEY" +
+                        "\nPosition: " + std::to_string(_pos));
                     }
                     _pos++;
-                    Json keyJson = parse_string();
+                    Json keyJson(JSON_STRING);
+                    try{
+                        keyJson = parse_string();
+                    }
+                    catch(std::logic_error& e){
+                        throw std::logic_error(std::string(e.what()) + 
+                          "\nContext: " + "PARSE_OBJECT_KEY" + 
+                          "\nPosition: " + std::to_string(_pos));
+                    }
                     context.key = *keyJson._value._string;
                     
                     skip_space();
                     if (_str[_pos] != ':') {
-                        throw std::logic_error("Expected ':' after object key");
+                        throw std::logic_error(std::string("Expected ':' after object key string") +
+                        "\nContext: " + "PARSE_OBJECT_KEY" +
+                        "\nPosition: " + std::to_string(_pos));
                     }
                     _pos++;
-                    context.state = PARSE_OBJECT_VALUE;
+                    context.state = PARSE_OBJECT_VALUE;   //状态转移 
                 }
                 break;
 
@@ -423,12 +510,46 @@ Json Json::parse() {
                     _pos++;
                     parseStack.push(ParseContext(PARSE_ARRAY_VALUE, valuePtr));
                 } else {
-                    if (ch == 'n') *valuePtr = parse_null();
-                    else if (ch == 't' || ch == 'f') *valuePtr = parse_bool();
-                    else if (ch == '-' || (ch >= '0' && ch <= '9')) *valuePtr = parse_number();
+                    if (ch == 'n') {
+                        try{
+                            *valuePtr = parse_null();
+                        }
+                        catch(std::logic_error& e){
+                            throw std::logic_error(std::string(e.what()) + 
+                              "\nContext: " + "PARSE_OBJECT_VALUE" + 
+                              "\nPosition: " + std::to_string(_pos));
+                        }
+                    }   
+                    else if (ch == 't' || ch == 'f') {
+                        try{
+                            *valuePtr = parse_bool();
+                        }
+                        catch(std::logic_error& e){
+                            throw std::logic_error(std::string(e.what()) + 
+                              "\nContext: " + "PARSE_OBJECT_VALUE" + 
+                              "\nPosition: " + std::to_string(_pos));
+                        }
+                    }
+                    else if (ch == '-' || (ch >= '0' && ch <= '9')) {   
+                        try{
+                            *valuePtr = parse_number();
+                        }
+                        catch(std::logic_error& e){
+                            throw std::logic_error(std::string(e.what()) + 
+                              "\nContext: " + "PARSE_OBJECT_VALUE" + 
+                              "\nPosition: " + std::to_string(_pos));
+                        }
+                    }
                     else if (ch == '"') {
-                        _pos++;
-                        *valuePtr = parse_string();
+                        _pos++; 
+                        try{
+                            *valuePtr = parse_string();
+                        }
+                        catch(std::logic_error& e){
+                            throw std::logic_error(std::string(e.what()) + 
+                              "\nContext: " + "PARSE_OBJECT_VALUE" + 
+                              "\nPosition: " + std::to_string(_pos));
+                        }   
                     }
                 }
                 context.state = PARSE_OBJECT_KEY;
@@ -468,14 +589,49 @@ Json Json::parse() {
                         _pos++;
                         parseStack.push(ParseContext(PARSE_ARRAY_VALUE, valuePtr));
                     } else {
-                        if (ch == 'n') *valuePtr = parse_null();
-                        else if (ch == 't' || ch == 'f') *valuePtr = parse_bool();
-                        else if (ch == '-' || (ch >= '0' && ch <= '9')) *valuePtr = parse_number();
+                        if (ch == 'n') {
+                            try{
+                                *valuePtr = parse_null();
+                            }
+                            catch(std::logic_error& e){
+                                throw std::logic_error(std::string(e.what()) + 
+                                  "\nContext: " + "PARSE_ARRAY_VALUE" + 
+                                  "\nPosition: " + std::to_string(_pos));
+                            }
+                        }
+                        else if (ch == 't' || ch == 'f') {
+                            try{
+                                *valuePtr = parse_bool();
+                            }
+                            catch(std::logic_error& e) {
+                                throw std::logic_error(std::string(e.what()) + 
+                                  "\nContext: " + "PARSE_ARRAY_VALUE" + 
+                                  "\nPosition: " + std::to_string(_pos));
+                            }
+                            _pos++;
+                        }
+
                         else if (ch == '"') {
                             _pos++;
-                            *valuePtr = parse_string();
+                            try{
+                                *valuePtr = parse_string();
+                            }
+                            catch(std::logic_error& e){
+                                throw std::logic_error(std::string(e.what()) + 
+                                  "\nContext: " + "PARSE_ARRAY_VALUE" + 
+                                  "\nPosition: " + std::to_string(_pos));
+                            }
                         }
-                        
+                        else if (ch == '-' || (ch >= '0' && ch <= '9')) {
+                            try{
+                                *valuePtr = parse_number();
+                            }
+                            catch(std::logic_error& e){
+                                throw std::logic_error(std::string(e.what()) + 
+                                  "\nContext: " + "PARSE_ARRAY_VALUE" + 
+                                  "\nPosition: " + std::to_string(_pos));
+                            }
+                        }
                         skip_space();
                         if (_pos < _str.size() && _str[_pos] == ',') {
                             _pos++;
@@ -489,7 +645,9 @@ Json Json::parse() {
     // 检查是否还有未解析的内容
     skip_space();
     if (_pos < _str.size()) {
-        throw std::runtime_error("Extra characters after JSON");
+        throw std::runtime_error(std::string("Extra characters after JSON") +
+        "\nContext: " + "AFTER_PARSE" +
+        "\nPosition: " + std::to_string(_pos));
     }
 
     return root;
@@ -500,7 +658,7 @@ Json Json::parse_null(){
         _pos += 4;
         return Json(Json::JSON_NULL);
     }
-    throw std::logic_error("Unexpected null value , position is " + std::to_string(_pos));
+    throw std::logic_error("Unexpected null value");
 }
 
 Json Json::parse_bool(){
@@ -512,28 +670,48 @@ Json Json::parse_bool(){
         _pos += 5;
         return Json(false);
     }
-    throw std::logic_error("Unexpected bool value , position is " + std::to_string(_pos));
+    throw std::logic_error("Unexpected bool value");
 }
 
 Json Json::parse_number(){
     size_t end = _pos;
     bool double_flag = false;
-    while (end < _str.size() && ((isdigit(_str[end]) || _str[end] == '.') || _str[end] == 'e' || _str[end] == 'E')) {
+    while (end < _str.size() && isdigit(_str[end]) || _str[end] == '.'||  (_str[end] == '+'|| _str[end] == '-')
+     || _str[end] == 'e' || _str[end] == 'E') {
         if (_str[end] == '.' || _str[end] == 'e' || _str[end] == 'E')
             double_flag = true;
         end++;
     }
     size_t _pos_o = _pos;
     _pos = end;
-    if(double_flag)
-        return Json(std::stod(_str.substr(_pos_o, end - _pos_o)));
-    else
-        return Json(std::stoi(_str.substr(_pos_o, end - _pos_o)));
+    if(double_flag){
+        try{
+            double number = std::stod(_str.substr(_pos_o, end - _pos_o));
+            return Json(number);
+        }
+        catch(std::invalid_argument& e){
+            throw std::logic_error("Invalid double number format");
+        }
+        catch(std::out_of_range& e){
+            throw std::logic_error("Double number out of range");
+        }
+    }    
+    else{
+        try{
+            return Json(std::stoi(_str.substr(_pos_o, end - _pos_o)));
+        }
+        catch(std::invalid_argument& e){
+            throw std::logic_error("Invalid integer format");
+        }
+        catch(std::out_of_range& e){
+            throw std::logic_error("Integer out of range");
+        }
+    }
 }
 
 Json Json::parse_string(){
     if(_str.find('"', _pos) == std::string::npos)
-        throw std::logic_error("Format error: Unexpected string value, position is " + std::to_string(_pos));
+        throw std::logic_error("Format error: Cannot find matching \"");
     size_t _pos_o = _pos;
     size_t end = _str.find('"', _pos);
     _pos = end+1;
@@ -544,12 +722,30 @@ void Json::parseStr(const std::string &str)
 {
     _str = str;
     _pos = 0;
-    Json temp = parse();
-    *this = std::move(temp);
+    Json temp(JSON_NULL);
+    try{
+        temp = parse();
+    }
+    catch(std::exception& e)
+    {
+        std::cerr<<e.what()<<std::endl;
+        //用户可能无法根据_pos定位错误，此处给出进一步上下文字符串
+        std::cout<<"Do you want to check the context string? "<<std::endl;
+        std::cout<<"[Y/N]"<<std::endl;
+        char choice;
+        std::cin>>choice;
+        if(choice == 'Y'){//输出错误位置前后30字符
+            std::cout<<_str.substr(_pos-30, 60)<<std::endl;
+        }
+        temp.clear();                  // 清空temp, 防止内存泄漏
+        *this = Json(JSON_NULL);
+        return;
+    }
+    *this = std::move(temp);           //成功Parse后移动temp
 }
 
 
-Json& Json::operator=(Json&& other)
+Json& Json::operator = (Json&& other)
 {
     if (this != &other) {
         clear();

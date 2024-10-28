@@ -38,6 +38,7 @@ int main()
 
     Json j;
     j.parseStr(processedJson);
+    /*std::cout << j.to_XML(1) << std::endl;*/
     std::cout << j.to_pretty_string(1) << std::endl;
 
     return 0;
