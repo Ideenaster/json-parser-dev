@@ -3,7 +3,6 @@
 #include <sstream>
 #include <iostream>
 #include <unordered_map>
-#include <stack>
 using namespace KJson;
 
 Json::Json() : _type(JSON_NULL) 
@@ -319,180 +318,42 @@ char Json::get_next(){
     return _str[_pos++];
 }
 
-// 解析状态
-enum ParseState {
-    PARSE_VALUE,
-    PARSE_OBJECT_KEY,
-    PARSE_OBJECT_VALUE,
-    PARSE_ARRAY_VALUE
-};
 
-// 存储解析上下文
-struct ParseContext {
-    ParseState state;
-    Json* json;
-    std::string key;  // 用于对象的键
-    ParseContext(ParseState s, Json* j) : state(s), json(j) {}
-};
-
-Json Json::parse() {
-    std::stack<ParseContext> parseStack;
-    Json root;
-    parseStack.push(ParseContext(PARSE_VALUE, &root));
-
-    while (!parseStack.empty()) {
-        ParseContext& context = parseStack.top();
-        
-        skip_space();
-        if (_pos >= _str.size()) {
-            if (parseStack.size() > 1) {  // 如果不��最外层，说明JSON未正确结束
-                throw std::runtime_error("Unexpected end of input");
-            }
-            break;  // 正常结束
-        }
-
-        char ch = _str[_pos];
-        
-        switch (context.state) {
-            case PARSE_VALUE:
-                if (ch == 'n') {
-                    *context.json = parse_null();
-                    parseStack.pop();
-                } else if (ch == 't' || ch == 'f') {
-                    *context.json = parse_bool();
-                    parseStack.pop();
-                } else if (ch == '-' || (ch >= '0' && ch <= '9')) {
-                    *context.json = parse_number();
-                    parseStack.pop();
-                } else if (ch == '"') {
-                    _pos++;
-                    *context.json = parse_string();
-                    parseStack.pop();
-                } else if (ch == '[') {
-                    *context.json = Json(JSON_ARRAY);
-                    _pos++;
-                    parseStack.push(ParseContext(PARSE_ARRAY_VALUE, context.json));
-                } else if (ch == '{') {
-                    *context.json = Json(JSON_OBJECT);
-                    _pos++;
-                    parseStack.push(ParseContext(PARSE_OBJECT_KEY, context.json));
-                } else {
-                    throw std::logic_error("Unexpected character");
-                }
-                break;
-
-            case PARSE_OBJECT_KEY:
-                if (ch == '}') {
-                    _pos++;
-                    parseStack.pop();
-                    // 如果这是最后一个状态且是初始的PARSE_VALUE，则结束解析
-                    if (parseStack.size() == 1 && parseStack.top().state == PARSE_VALUE) {
-                        parseStack.pop();
-                    } else {
-                        // 否则检查后续的逗号
-                        skip_space();
-                        if (_pos < _str.size() && _str[_pos] == ',') {
-                            _pos++;
-                        }
-                    }
-                } else {
-                    if (ch != '"') {
-                        throw std::logic_error("Expected '\"' for object key");
-                    }
-                    _pos++;
-                    Json keyJson = parse_string();
-                    context.key = *keyJson._value._string;
-                    
-                    skip_space();
-                    if (_str[_pos] != ':') {
-                        throw std::logic_error("Expected ':' after object key");
-                    }
-                    _pos++;
-                    context.state = PARSE_OBJECT_VALUE;
-                }
-                break;
-
-            case PARSE_OBJECT_VALUE: {
-                Json* valuePtr = &((*context.json)[context.key]);
-                if (ch == '{') {
-                    *valuePtr = Json(JSON_OBJECT);
-                    _pos++;
-                    parseStack.push(ParseContext(PARSE_OBJECT_KEY, valuePtr));
-                } else if (ch == '[') {
-                    *valuePtr = Json(JSON_ARRAY);
-                    _pos++;
-                    parseStack.push(ParseContext(PARSE_ARRAY_VALUE, valuePtr));
-                } else {
-                    if (ch == 'n') *valuePtr = parse_null();
-                    else if (ch == 't' || ch == 'f') *valuePtr = parse_bool();
-                    else if (ch == '-' || (ch >= '0' && ch <= '9')) *valuePtr = parse_number();
-                    else if (ch == '"') {
-                        _pos++;
-                        *valuePtr = parse_string();
-                    }
-                }
-                context.state = PARSE_OBJECT_KEY;
-                
-                skip_space();
-                if (_pos < _str.size() && _str[_pos] == ',') {
-                    _pos++;
-                }
-                break;
-            }
-
-            case PARSE_ARRAY_VALUE:
-                if (ch == ']') {
-                    _pos++;
-                    parseStack.pop();
-                    // 如果这是最后一个状态且是初始的PARSE_VALUE，则结束解析
-                    if (parseStack.size() == 1 && parseStack.top().state == PARSE_VALUE) {
-                        parseStack.pop();
-                    } else {
-                        // 否则检查后续的逗号
-                        skip_space();
-                        if (_pos < _str.size() && _str[_pos] == ',') {
-                            _pos++;
-                        }
-                    }
-                } else {
-                    Json newElement;
-                    context.json->push_back(newElement);
-                    Json* valuePtr = &((*context.json)[context.json->array_size() - 1]);
-                    
-                    if (ch == '{') {
-                        *valuePtr = Json(JSON_OBJECT);
-                        _pos++;
-                        parseStack.push(ParseContext(PARSE_OBJECT_KEY, valuePtr));
-                    } else if (ch == '[') {
-                        *valuePtr = Json(JSON_ARRAY);
-                        _pos++;
-                        parseStack.push(ParseContext(PARSE_ARRAY_VALUE, valuePtr));
-                    } else {
-                        if (ch == 'n') *valuePtr = parse_null();
-                        else if (ch == 't' || ch == 'f') *valuePtr = parse_bool();
-                        else if (ch == '-' || (ch >= '0' && ch <= '9')) *valuePtr = parse_number();
-                        else if (ch == '"') {
-                            _pos++;
-                            *valuePtr = parse_string();
-                        }
-                        
-                        skip_space();
-                        if (_pos < _str.size() && _str[_pos] == ',') {
-                            _pos++;
-                        }
-                    }
-                }
-                break;
-        }
-    }
-
-    // 检查是否还有未解析的内容
+Json Json::parse(){
     skip_space();
-    if (_pos < _str.size()) {
-        throw std::runtime_error("Extra characters after JSON");
+    char ch = get_next();
+    switch(ch)
+    {
+        case 'n':
+            _pos--;
+            return parse_null();
+        case 't':
+        case 'f':
+            _pos--;
+            return parse_bool();
+        case '-':
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+            _pos--;
+            return parse_number(); 
+        case '"':
+            return parse_string();
+        case '[':
+            return parse_array();
+        case '{':
+            return parse_object();
+        default:
+            std::cout << "Unexpected character is : " << static_cast<int>(ch) << std::endl;
     }
-
-    return root;
+    throw std::logic_error("Unexpected Character");
 }
 
 Json Json::parse_null(){
@@ -540,12 +401,70 @@ Json Json::parse_string(){
     return Json(_str.substr(_pos_o, end - _pos_o));
 }
 
+Json Json::parse_array()
+{
+    Json arr(JSON_ARRAY); // 声明一个数组类型的Json对象
+    char ch = get_next();
+    if(ch == ']') {
+        return arr; // 返回空数组类型
+    }
+    _pos--;
+    while(true) {
+        arr.push_back(parse()); 
+        ch = get_next();
+        if(ch == ']') {
+            break;
+        }
+        if(ch != ',') { // 下个字符是否含逗号
+            throw std::logic_error("Expected ',' in array, position is " + std::to_string(_pos));
+        }
+        else { 
+            _pos--;
+        }
+        _pos++;
+    }
+    return arr;
+}
+
+
+Json Json::parse_object()
+{
+    Json obj(JSON_OBJECT);    
+    char ch = get_next();
+    if(ch == '}') {
+        return obj; // 返回空对象
+    }
+    _pos--;
+    while(true) {
+        ch = get_next();
+        if(ch != '"') {
+            throw std::logic_error("parse object error");
+        }
+        std::string key = *(parse_string()._value._string); // 解析键key
+        ch = get_next();
+        if(ch != ':') {
+            throw std::logic_error("parse object error");
+        }
+        obj[key] = parse(); // 递归解析值value
+        ch = get_next();
+        if(ch == '}') {
+            break;
+        }
+        if(ch != ',') {
+            throw std::logic_error("parse object error");
+        }
+    }
+    return obj;
+}
+
 void Json::parseStr(const std::string &str)
 {
     _str = str;
     _pos = 0;
     Json temp = parse();
     *this = std::move(temp);
+    temp._type = JSON_NULL;
+    temp._value._int = 0;
 }
 
 
@@ -569,8 +488,4 @@ Json& Json::operator=(const Json& other)
     }
     return *this;
 }
-
-
-
-
 

@@ -48,3 +48,29 @@
 ## day4
 ## 移动语义问题
 由于没有相关的开发经验，在设计数组API和对象API时考虑过于简单，只实现了基于const左值引用的参数传入，而在进行parse_arrary和parse_object等parse子函数实现时相当自然地将函数返回值直接传入对应的push_back,append等函数，右值对象传入时构造了临时对象，不仅需要负担深拷贝的开销，同时在函数调用结束后会对这些临时对象进行析构，造成析构错误（同样是同一对象资源析构两次的问题），解决方案是实现完整的移动语义相关函数，右值引用operator，右值引用参数输入等等。
+
+
+## day5
+## 非递归实现
+由于使用递归函数下降的方式实现parse会导致大量的栈空间占用，在Json结构相对复杂的情况下，可能会因为递归深度导致栈空间不足。所以采用模拟栈的方式将原先的递归parse改为非递归parse
+### AST状态维护
+```cpp
+enum ParseState {
+    PARSE_VALUE,
+    PARSE_OBJECT_KEY,
+    PARSE_OBJECT_VALUE,
+    PARSE_ARRAY_VALUE
+};
+
+// 存储解析上下文
+struct ParseContext {
+    ParseState state;
+    Json* json;
+    std::string key;  // 用于对象的键
+    ParseContext(ParseState s, Json* j) : state(s), json(j) {}
+};
+```
+每次解析的上下文由ParseContext进行管理
+### 解决问题
+- 一开始出于代码复用的考虑将PARSE_OBJECT_VALUE状态重定向到PARSE_VALUE(该状态负责基本类型的解析)，增加该重定向过程引发一系列问题，比如无法从嵌套object或者array中跳出。
+- 当前方案为使用重复的PARSE_VALUE段进行解析，解析过程中PARSE_OBJECT_VALUE和PARSE_OBJECT_KEY等不会构建下层解析状态，直接进switch作基本类型解析。

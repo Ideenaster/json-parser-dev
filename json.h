@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <unordered_map>
 
 namespace KJson
 {
@@ -28,7 +29,7 @@ namespace KJson
         Json(const std::string &value);
         Json(const char *value);
         Json(std::vector<Json> value);
-        Json(std::map<std::string, Json> value);
+        Json(std::unordered_map<std::string, Json> value);
         Json(JsonType type);
         Json(const Json &other);
 
@@ -57,6 +58,7 @@ namespace KJson
 
         // 序列化为字符串
         std::string to_string() const;
+        std::string to_pretty_string(int indent_level) const;
         void parseStr(const std::string &str);
 
     private:
@@ -69,7 +71,7 @@ namespace KJson
             double _double;
             std::string *_string;
             std::vector<Json> *_array;
-            std::map<std::string, Json> *_object;
+            std::unordered_map<std::string, Json> *_object;
         };
         JsonValue _value;
         //待解析字符串
