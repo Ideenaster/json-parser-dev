@@ -3,15 +3,11 @@
 #include <vector>
 #include <map>
 #include <unordered_map>
-#include <string_view>   //cpp17
+//#include <string_view>   //cpp17
 
 namespace KJson
 {
-    class Json
-    {
-    public:
-        // 类型
-        enum JsonType
+    enum JsonType
         {
             JSON_NULL,
             JSON_BOOL,
@@ -21,11 +17,15 @@ namespace KJson
             JSON_ARRAY,
             JSON_OBJECT
         };
-
+    class Json
+    {
+    public:
+        // 类型
         // 构造函数
         Json();
         Json(bool value);
         Json(int value);
+        Json(int64_t value);
         Json(double value);
         Json(const std::string &value);
         Json(const char *value);
@@ -54,6 +54,7 @@ namespace KJson
 
         // 对象API
         void insert(const std::string &key, const Json &value);
+        void insert(const std::string &key, Json&& value);
         Json &operator[](const std::string &key);
         size_t object_size() const;
 
@@ -65,11 +66,11 @@ namespace KJson
 
     private:
         JsonType _type;
-        // 值,使用Union实现类似于动态类型的效果
+        // 使用Union实现类似于动态类型的效果
         union JsonValue
         {
             bool _bool;
-            int _int;
+            int64_t _int;
             double _double;
             std::string *_string;
             std::vector<Json> *_array;

@@ -96,3 +96,13 @@ throw std::logic_error(std::string(e.what()) +
 
 ### 测试
 唉，最后测试一个benchmark发现没处理parse_string的转义字符问题
+
+### day7
+#### string转义
+使用有限状态机模型处理了string中可能出现的转义字符问题，状态机在parse_string中设置NORMAL状态和ESCAPED状态
+
+#### JSON int range?
+json没有存储结构意义上的int类型，实质上是number类型的子集，而number类型更类似于字符串式的，为了兼容性，将int修改为int64_t
+
+#### 测试
+

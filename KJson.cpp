@@ -1,4 +1,4 @@
-#include "json.h"
+#include "KJson.h"
 #include <stdexcept>
 #include <sstream>
 #include <iostream>
@@ -15,6 +15,10 @@ Json::Json(bool value) : _type(JSON_BOOL)
     _value._bool = value;
 }
 Json::Json(int value) : _type(JSON_INT)   
+{
+    _value._int = static_cast<int64_t>(value);
+}
+Json::Json(int64_t value) : _type(JSON_INT)   
 {
     _value._int = value;
 }
@@ -123,6 +127,7 @@ Json::~Json()
 
 void Json::copy(const Json& other)
 {
+    _type = other._type;
     switch(other._type){
     case JSON_NULL:
         break;
@@ -192,6 +197,17 @@ void Json::insert(const std::string& key, const Json& value)
         _value._object = new std::unordered_map<std::string, Json>();
     }
     (*_value._object)[key] = value;
+}
+void Json::insert(const std::string &key, Json&& value)
+{
+    if(_type != JSON_OBJECT){
+        clear();
+        _type = JSON_OBJECT;
+        _value._object = new std::unordered_map<std::string, Json>();
+    }
+    (*_value._object)[key] = std::move(value);
+    value._type = JSON_NULL;
+    value._value._int = 0;
 }
 Json& Json::operator[](const std::string& key)
 {
@@ -577,7 +593,7 @@ Json Json::parse() {
                     }
                 } else {
                     Json newElement;
-                    context.json->push_back(newElement);
+                    context.json->push_back(std::move(newElement));
                     Json* valuePtr = &((*context.json)[context.json->array_size() - 1]);
                     
                     if (ch == '{') {
@@ -656,7 +672,7 @@ Json Json::parse() {
 Json Json::parse_null(){
     if(_str.compare(_pos, 4, "null") == 0){
         _pos += 4;
-        return Json(Json::JSON_NULL);
+        return Json(JSON_NULL);
     }
     throw std::logic_error("Unexpected null value");
 }
@@ -698,7 +714,8 @@ Json Json::parse_number(){
     }    
     else{
         try{
-            return Json(std::stoi(_str.substr(_pos_o, end - _pos_o)));
+            int64_t number = std::stoll(_str.substr(_pos_o, end - _pos_o));
+            return Json(number);
         }
         catch(std::invalid_argument& e){
             throw std::logic_error("Invalid integer format");
@@ -709,13 +726,45 @@ Json Json::parse_number(){
     }
 }
 
-Json Json::parse_string(){
-    if(_str.find('"', _pos) == std::string::npos)
-        throw std::logic_error("Format error: Cannot find matching \"");
-    size_t _pos_o = _pos;
-    size_t end = _str.find('"', _pos);
-    _pos = end+1;
-    return Json(_str.substr(_pos_o, end - _pos_o));
+Json Json::parse_string() {
+    std::string result;
+    enum State { NORMAL, ESCAPED }; 
+    State state = NORMAL;
+    while (_pos < _str.size()) {
+        char ch = _str[_pos++];
+        switch (state) {
+            case NORMAL:
+                if (ch == '\\') {
+                    state = ESCAPED;
+                } else if (ch == '"') {
+                    return Json(result);
+                } else {
+                    result += ch;
+                }
+                break;
+                
+            case ESCAPED:
+                switch (ch) {
+                    case '"': result += '"'; break;
+                    case '\\': result += '\\'; break;
+                    case '/': result += '/'; break;
+                    case 'b': result += '\b'; break;
+                    case 'f': result += '\f'; break;
+                    case 'n': result += '\n'; break;
+                    case 'r': result += '\r'; break;
+                    case 't': result += '\t'; break;
+                    // TODO: 处理 \uXXXX Unicode 转义
+                    default:
+                        result += '\\';
+                        result += ch;
+                        break;
+                }
+                state = NORMAL;
+                break;
+        }
+    }
+    
+    throw std::logic_error("Unterminated string");
 }
 
 void Json::parseStr(const std::string &str)
@@ -730,7 +779,7 @@ void Json::parseStr(const std::string &str)
     {
         std::cerr<<e.what()<<std::endl;
         //用户可能无法根据_pos定位错误，此处给出进一步上下文字符串
-        std::cout<<"Do you want to check the context string? "<<std::endl;
+        std::cout<<"Do you want to check the context string? ";
         std::cout<<"[Y/N]"<<std::endl;
         char choice;
         std::cin>>choice;
